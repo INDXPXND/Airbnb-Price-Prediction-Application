@@ -48,7 +48,7 @@ class PredictionRequest(BaseModel):
 
     reviews: int = Field(ge=0)
 
-    amenities: list[str]             # human-readable labels from constants.AMENITIES
+    amenities: list[str]
 
 
 class PredictionResponse(BaseModel):
@@ -62,7 +62,6 @@ async def root():
 
 @app.get("/amenities")
 async def get_amenities():
-    """Lets the frontend fetch the exact amenity list the model supports."""
     return {"amenities": [a["display"] for a in AMENITIES]}
 
 

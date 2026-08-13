@@ -1,3 +1,14 @@
+import sys
+from pathlib import Path
+
+# `streamlit run app/main.py` puts this file's own directory (app/) on
+# sys.path, not the project root -- so the sibling `common/` package isn't
+# found unless PYTHONPATH is set. Docker sets PYTHONPATH explicitly
+# (see Dockerfile.streamlit), but a plain local run doesn't, so we add the
+# project root here too, making this work regardless of cwd or PYTHONPATH.
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import pandas as pd
 import requests
 import streamlit as st
@@ -17,21 +28,6 @@ API_URL = os.environ.get("API_URL", "http://api:8000")
 
 st.set_page_config(page_title="Airbnb price prediction", page_icon="🏠")
 
-st.markdown(
-    """
-    <style>
-    .stApp {
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400' viewBox='0 0 400 400'%3E%3Cpath d='M200 60 L340 170 L340 340 L240 340 L240 250 L160 250 L160 340 L60 340 L60 170 Z' fill='none' stroke='%237C3AED' stroke-width='2' opacity='0.06'/%3E%3C/svg%3E");
-        background-repeat: no-repeat;
-        background-position: top right;
-        background-size: 500px 500px;
-        background-attachment: fixed;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
 @st.cache_data
 def load_data():
     return pd.read_csv("datasets/airbnb_updated.csv")
@@ -42,9 +38,7 @@ df = load_data()
 st.title("Airbnb apartment price prediction")
 st.caption("Fill in the listing details and get an estimated nightly price.")
 
-top_20 = df["country"].value_counts().nlargest(20).index.tolist()
-
-st.caption("Top 20 countries: " + ", ".join(top_20))
+st.caption("Top 20 countries: " + ", ".join(TOP_COUNTRIES))
 
 
 col1, col2 = st.columns(2)
@@ -58,14 +52,14 @@ with col1:
 
     bathroom_type = st.selectbox("Bathroom", BATHROOM_TYPES)
 
-    bathrooms = st.number_input("Bathrooms", value=1, step=1)
+    bathrooms = st.number_input("Bathrooms", min_value=0, max_value=int(df["bathrooms"].max()), value=1, step=1)
 
-    guests = st.number_input("Guests", value=2, step=1)
+    guests = st.number_input("Guests", min_value=1, max_value=int(df["guests"].max()), value=2, step=1)
 
 with col2:
-    bedrooms = st.number_input("Bedrooms", value=1, step=1)
+    bedrooms = st.number_input("Bedrooms", min_value=0, max_value=int(df["bedrooms"].max()), value=1, step=1)
 
-    beds = st.number_input("Beds", value=1, step=1)
+    beds = st.number_input("Beds", min_value=0, max_value=int(df["beds"].max()), value=1, step=1)
 
     studio = st.checkbox("Studio apartment")
 
@@ -84,7 +78,7 @@ with st.expander("Additional details (optional)"):
     else:
         region = "Other"
         st.selectbox("Region", ["Other"], disabled=True,
-                      help=f"No individually-modeled region for {country} — region will be \"Other\".")
+                     help=f"No individually-modeled region for {country} — region will be \"Other\".")
 
     checkin_choices = TOP_CHECKIN + ["Other"]
 
@@ -93,8 +87,9 @@ with st.expander("Additional details (optional)"):
     checkout_choices = TOP_CHECKOUT + ["Other"]
     checkout = st.selectbox("Check-out", checkout_choices)
 
-    toiles = st.number_input("Toilets", value=0, step=1)
-    reviews = st.number_input("Number of reviews", value=0, step=1)
+    toiles = st.number_input("Toilets", min_value=0, max_value=int(df["toiles"].max()), value=0, step=1)
+
+    reviews = st.number_input("Number of reviews", min_value=0, max_value=int(df["reviews"].max()), value=0, step=1)
 
     has_rating = st.checkbox("Listing already has a rating")
     rating = st.slider("Rating", 0.0, 5.0, 4.8, 0.01) if has_rating else None
