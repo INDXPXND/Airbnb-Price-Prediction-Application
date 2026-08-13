@@ -9,16 +9,30 @@ CatBoost model, and a **Streamlit** frontend with the input form.
 
 ```
 .
-├── api.py                  # FastAPI backend: /predict, /amenities
+├── api.py                     # FastAPI backend: /predict, /amenities
 ├── app/
-│   └── main.py               # Streamlit frontend
+│   ├── .streamlit/            # Streamlit config
+│   └── main.py                # Streamlit frontend
 ├── common/
-│   └── constants.py          # shared constants (top-N categories, amenity list)
+│   └── constants.py           # shared constants (top-N categories, amenity list)
 ├── models/
-│   └── cbr.jbl                # trained CatBoostRegressor
+│   ├── cbr.jbl                # trained CatBoostRegressor (used in production)
+│   └── hs.jbl                 # CatBoost tuned via HalvingRandomSearchCV
 ├── datasets/
-│   └── airbnb_updated.csv    # cleaned dataset (used by the UI and to compute top-N)
-├── Airbnb.ipynb              # notebook with EDA, preprocessing and model training
+│   ├── airbnb.csv              # raw dataset
+│   └── airbnb_updated.csv     # cleaned dataset (used by the UI and to compute top-N)
+├── catboost_info/             # CatBoost training logs (generated on training run)
+├── visualization/
+│   ├── boxplot.png             # price distribution boxplot
+│   └── feature_importance.png  # feature importance chart
+├── test/
+│   ├── conftest.py            # sys.path setup so `common`/`api`/`app` resolve
+│   ├── pytest.ini
+│   ├── requirements-dev.txt
+│   ├── test_api.py
+│   ├── test_constants.py
+│   └── test_streamlit.py
+├── Airbnb.ipynb               # notebook with EDA, preprocessing and model training
 ├── Dockerfile.api
 ├── Dockerfile.streamlit
 ├── compose.yaml
@@ -251,7 +265,7 @@ The test suite lives in `tests/` and covers all three layers of the project:
 the shared bucketing logic, the FastAPI backend, and the Streamlit frontend.
 
 ```
-tests/
+test/
 ├── conftest.py          # puts the project root on sys.path so `common`,
 │                         # `api`, and `app` resolve regardless of cwd
 ├── test_constants.py    # unit tests for common/constants.py
@@ -289,7 +303,7 @@ pip install -r requirements.txt -r requirements-dev.txt
 PYTHONPATH=. pytest
 ```
 
-`pytest.ini` sets `testpaths = tests`, so plain `pytest` from the project
+`pytest.ini` sets `testpaths = test`, so plain `pytest` from the project
 root is enough. `PYTHONPATH=.` (or running from the project root, which
 `conftest.py` also forces via `sys.path`) is needed for the same reason it's
 needed to run the app itself - so `common.constants` resolves. Both
