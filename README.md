@@ -5,6 +5,27 @@ characteristics (country, region, number of rooms/bathrooms, rating,
 amenities, etc.). It's made of two services: a **FastAPI** backend serving a
 CatBoost model, and a **Streamlit** frontend with the input form.
 
+## Project goal
+
+Predict the nightly price of an Airbnb listing (a regression problem, in
+USD) from structured features derived from the raw listing data - location,
+room layout, rating, amenities - and serve that model through a small
+API + UI so a price estimate can be requested for a listing that doesn't
+exist in the dataset yet. The metric optimized for is **test R²** (on the
+real price scale, after `expm1`) while keeping the train/test gap small -
+i.e. a model is picked for generalizing well, not just for the best raw fit
+on the training data (see [Baseline](#baseline) and
+[The model](#the-model)).
+
+## Quick start
+
+```bash
+docker compose up --build
+```
+
+FastAPI at http://localhost:8000, Streamlit UI at http://localhost:8501.
+See [Running it](#running-it) for the non-Docker setup.
+
 ## Project structure
 
 ```
@@ -145,23 +166,34 @@ for those same fields (plus `"Other"`), so it doesn't create the illusion of
 choice where, as far as the model is concerned, everything behaves
 identically anyway.
 
+## Validation scheme
+
+- **Split:** a single hold-out split, `train_test_split(X, y, test_size=0.3, random_state=42)` - 70% train / 30% test - done right after log-transforming `price`, before any categorical bucketing or missing-value filling.
+- **No leakage:** the top-N bucketing (`country`/`region`/`checkin`/`checkout` → `"Other"`, see [above](#why-only-the-top-20-countries-and-top-30-regions)) and the median `rating` fill are both computed **on the training split only**, then applied as-is to the test split.
+- **Hyperparameter tuning:** `HalvingRandomSearchCV(cv=5, ...)` - 5-fold cross-validation, run on the training split only; the test split is never touched until the final scoring pass.
+- **Metric:** R² on the real price scale (after `expm1`), reported for train *and* test so the train − test gap can be read as an overfitting signal, not just the best single test score (see [Baseline](#baseline) below).
+
+## Baseline
+
+The baseline is a plain **`RandomForestRegressor`** (see `Airbnb.ipynb`) with every categorical one-hot encoded - the default approach for a model without native categorical support. It reaches `R² test = 0.489`, the lowest of all four models, but with the smallest train − test gap (`0.043`). CatBoost is evaluated against this baseline (and against XGBoost/LightGBM, two other one-hot baselines) below, and it's picked for production.
+
 ## The model
 
 The notebook compares four models (metrics below are R² on the real price,
 i.e. after `expm1`, not on the log scale):
 
 | Model | Category encoding | R² train | R² test | train − test |
-|---|---|---|---|---|
-| **CatBoost** *(used in production)* | native (`cat_features`) | 0.638 | 0.585 | **0.053** |
-| RandomForest | One-Hot | 0.839 | 0.601 | 0.238 |
-| XGBoost | One-Hot | 0.753 | 0.630 | 0.123 |
-| LightGBM | One-Hot | 0.718 | 0.623 | 0.095 |
+|---|---|---|---|--------------|
+| **CatBoost** *(used in production)* | native (`cat_features`) | 0.638 | 0.585 | **0.053**    |
+| RandomForest *(baseline)* | One-Hot | 0.532 | 0.489 | 0.043        |
+| XGBoost | One-Hot | 0.753 | 0.630 | 0.123        |
+| LightGBM | One-Hot | 0.718 | 0.623 | 0.095        |
 
 *(R² here is computed on the `log1p` price scale — the same scale the models
 were trained on.)*
 
 CatBoost isn't the top model by raw test R² — but it has by far the smallest
-gap between train and test (0.05 vs. 0.10–0.24), meaning the least
+gap between train and test (0.05 vs. 0.1), meaning the least
 overfitting, plus it doesn't need a bloated one-hot column set and handles
 categoricals natively (which is exactly what drove the whole `"Other"`-
 bucketing approach above). It was trained as:
